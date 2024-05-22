@@ -1,158 +1,163 @@
-import json
-import random
-import sqlite3
 import threading
 import time
+import random
 from datetime import datetime, timedelta
 from telebot import types
 
 players = {}
-game_in_progress = False
+roles = {}
 votes = {}
-db_lock = threading.Lock()
+night_actions = {}
+game_in_progress = False
+INACTIVITY_TIMEOUT = timedelta(minutes=5)
+bot_instance = None
+
 
 def load_game_data():
-    global players
-    try:
-        with open('game_data.json', 'r') as f:
-            players = json.load(f)
-    except FileNotFoundError:
-        players = {}
+    pass
+
 
 def save_game_data():
-    with open('game_data.json', 'w') as f:
-        json.dump(players, f)
+    pass
 
-def start_new_game(chat_id, bot):
-    global game_in_progress
-    if not check_player_count(chat_id, bot):
-        return
-
-    assign_roles()
-    notify_roles(bot)
-    game_in_progress = True
-    bot.send_message(chat_id, "Игра начинается! Наступает ночь.")
-    night_phase(chat_id, bot)
 
 def check_player_count(chat_id, bot):
     if len(players) < 5:
-        bot.send_message(chat_id, "Недостаточно игроков для начала игры. Нужно минимум 5 игроков.")
+        bot.send_message(chat_id, "Для начала игры требуется минимум 5 игроков.")
+        return False
+    elif len(players) > 8:
+        bot.send_message(chat_id, "Максимальное количество игроков - 8.")
         return False
     return True
 
-def assign_roles():
-    roles = ['mafia', 'doctor', 'detective'] + ['villager'] * (len(players) - 3)
-    random.shuffle(roles)
-    for player_id, role in zip(players, roles):
-        players[player_id]['role'] = role
-        players[player_id]['alive'] = True
 
-def notify_roles(bot):
-    for player_id, player_info in players.items():
-        bot.send_message(player_id, f"Ваша роль: {player_info['role']}")
+def start_new_game(chat_id, bot):
+    global game_in_progress, roles, votes, night_actions
+    game_in_progress = True
+    roles = assign_roles(players)
+    votes = {}
+    night_actions = {}
+    for player_id, role in roles.items():
+        bot.send_message(player_id, f"Ваша роль: {role}")
+    bot.send_message(chat_id, "Игра началась! Ночь начинается.")
+    start_night_phase(chat_id, bot)
 
-def night_phase(chat_id, bot):
-    bot.send_message(chat_id, "Наступает ночь. Мафия, доктор и детектив, проверьте свои личные сообщения.")
-    for player_id, player_info in players.items():
-        if player_info['role'] == 'mafia':
+
+def assign_roles(players):
+    player_ids = list(players.keys())
+    random.shuffle(player_ids)
+    num_players = len(player_ids)
+    roles = {}
+
+    if num_players >= 5:
+        roles[player_ids[0]] = 'Мафия'
+        roles[player_ids[1]] = 'Комиссар'
+        roles[player_ids[2]] = 'Доктор'
+        for i in range(3, num_players):
+            roles[player_ids[i]] = 'Мирный житель'
+    if num_players >= 6:
+        roles[player_ids[3]] = 'Мафия'
+    if num_players >= 7:
+        roles[player_ids[4]] = 'Мирный житель'
+    if num_players == 8:
+        roles[player_ids[5]] = 'Мирный житель'
+
+    return roles
+
+
+def start_night_phase(chat_id, bot):
+    global night_actions
+    night_actions = {'Мафия': None, 'Доктор': None, 'Комиссар': None}
+    bot.send_message(chat_id,
+                     "Ночь наступила. Мафия, Доктор и Комиссар, проверьте свои личные сообщения для выполнения действий.")
+
+    for player_id, role in roles.items():
+        if role == 'Мафия':
             markup = types.InlineKeyboardMarkup()
-            for target_id, target_info in players.items():
-                if target_id != player_id and target_info['alive']:
-                    markup.add(types.InlineKeyboardButton(target_info['name'], callback_data=f"night_kill_{target_id}"))
+            for target_id, target_name in players.items():
+                if target_id != player_id:
+                    markup.add(
+                        types.InlineKeyboardButton(text=target_name['name'], callback_data=f'night_kill_{target_id}'))
             bot.send_message(player_id, "Выберите цель для убийства:", reply_markup=markup)
-        elif player_info['role'] == 'doctor':
+        elif role == 'Доктор':
             markup = types.InlineKeyboardMarkup()
-            for target_id, target_info in players.items():
-                if target_info['alive']:
-                    markup.add(types.InlineKeyboardButton(target_info['name'], callback_data=f"night_save_{target_id}"))
-            bot.send_message(player_id, "Выберите цель для спасения:", reply_markup=markup)
-        elif player_info['role'] == 'detective':
+            for target_id, target_name in players.items():
+                markup.add(
+                    types.InlineKeyboardButton(text=target_name['name'], callback_data=f'night_save_{target_id}'))
+            bot.send_message(player_id, "Выберите цель для лечения:", reply_markup=markup)
+        elif role == 'Комиссар':
             markup = types.InlineKeyboardMarkup()
-            for target_id, target_info in players.items():
-                if target_id != player_id and target_info['alive']:
-                    markup.add(types.InlineKeyboardButton(target_info['name'], callback_data=f"night_check_{target_id}"))
+            for target_id, target_name in players.items():
+                if target_id != player_id:
+                    markup.add(
+                        types.InlineKeyboardButton(text=target_name['name'], callback_data=f'night_check_{target_id}'))
             bot.send_message(player_id, "Выберите цель для проверки:", reply_markup=markup)
 
-def handle_night_action_callback(callback_query, bot):
-    data = callback_query.data.split('_')
-    action = data[1]
-    target_id = int(data[2])
-    player_id = callback_query.from_user.id
 
-    if action == 'kill':
-        players[player_id]['night_action'] = ('kill', target_id)
-        bot.send_message(player_id, f"Вы выбрали цель для убийства: {players[target_id]['name']}")
-    elif action == 'save':
-        players[player_id]['night_action'] = ('save', target_id)
-        bot.send_message(player_id, f"Вы выбрали цель для спасения: {players[target_id]['name']}")
-    elif action == 'check':
-        players[player_id]['night_action'] = ('check', target_id)
-        bot.send_message(player_id, f"Вы выбрали цель для проверки: {players[target_id]['name']}")
+def handle_night_action_callback(call, bot):
+    global night_actions
+    action, target_id = call.data.split('_')[1], int(call.data.split('_')[2])
+    player_id = call.from_user.id
+    role = roles[player_id]
 
-    # проверка на ночные действия
-    if all('night_action' in player_info for player_id, player_info in players.items() if player_info['role'] in ['mafia', 'doctor', 'detective']):
-        resolve_night_actions(callback_query.message.chat.id, bot)
+    if role == 'Мафия' and action == 'kill':
+        night_actions['Мафия'] = target_id
+    elif role == 'Доктор' and action == 'save':
+        night_actions['Доктор'] = target_id
+    elif role == 'Комиссар' and action == 'check':
+        night_actions['Комиссар'] = target_id
 
+    bot.send_message(player_id, f"Вы выбрали {players[target_id]['name']}")
 
-def resolve_night_actions(chat_id, bot):
-    kill_target = None
-    save_target = None
-    check_target = None
-
-    for player_id, player_info in players.items():
-        if player_info['role'] == 'mafia':
-            kill_target = player_info['night_action'][1]
-        elif player_info['role'] == 'doctor':
-            save_target = player_info['night_action'][1]
-        elif player_info['role'] == 'detective':
-            check_target = player_info['night_action'][1]
-
-    if kill_target is not None and kill_target != save_target:
-        players[kill_target]['alive'] = False
-
-    night_report = "Ночь прошла:\n"
-    if kill_target is not None:
-        if kill_target == save_target:
-            night_report += f"Доктор спас {players[kill_target]['name']}.\n"
-        else:
-            night_report += f"Мафия убила {players[kill_target]['name']}.\n"
-
-    if check_target is not None:
-        night_report += f"Детектив проверил {players[check_target]['name']}. Его роль: {players[check_target]['role']}.\n"
-
-    for player_id, player_info in players.items():
-        bot.send_message(player_id, night_report)
-
-    day_phase(chat_id, bot)
+    if all(action is not None for action in night_actions.values()):
+        end_night_phase(call.message.chat.id, bot)
 
 
-def day_phase(chat_id, bot):
-    bot.send_message(chat_id, "Наступает день. Обсудите и проголосуйте за игрока, которого хотите изгнать.")
-    initiate_voting(chat_id, bot)
+def end_night_phase(chat_id, bot):
+    global night_actions
+    kill_target = night_actions['Мафия']
+    save_target = night_actions['Доктор']
+    check_target = night_actions['Комиссар']
+    kill_result = 'Никто не был убит.'
 
-def initiate_voting(chat_id, bot):
-    global votes
-    votes = {}
+    if kill_target != save_target:
+        kill_result = f"{players[kill_target]['name']} был убит."
+        del players[kill_target]
+        del roles[kill_target]
+
+    check_result = f"{players[check_target]['name']} является {roles[check_target]}."
+
+    for player_id, role in roles.items():
+        if role == 'Комиссар':
+            bot.send_message(player_id, check_result)
+        elif role == 'Мафия':
+            bot.send_message(player_id, kill_result)
+
+    bot.send_message(chat_id, kill_result)
+    check_win_condition(chat_id, bot)
+
+
+def start_day_phase(chat_id, bot):
     markup = types.InlineKeyboardMarkup()
     for player_id, player_info in players.items():
-        if player_info['alive']:
-            markup.add(types.InlineKeyboardButton(player_info['name'], callback_data=f"vote_{player_id}"))
-    bot.send_message(chat_id, "За кого проголосуешь?", reply_markup=markup)
+        markup.add(types.InlineKeyboardButton(text=player_info['name'], callback_data=f'vote_{player_id}'))
+    bot.send_message(chat_id, "День начался. Голосуйте за подозреваемого:", reply_markup=markup)
 
-def handle_vote(callback_query, bot):
-    voter_id = callback_query.from_user.id
-    if voter_id in votes:
-        bot.send_message(callback_query.message.chat.id, "Вы уже проголосовали.")
-        return
 
-    target_id = int(callback_query.data.split('_')[1])
+def handle_vote(call, bot):
+    global votes
+    voter_id = call.from_user.id
+    target_id = int(call.data.split('_')[1])
+
     votes[voter_id] = target_id
-    bot.send_message(callback_query.message.chat.id, f"{players[voter_id]['name']} проголосовал за {players[target_id]['name']}.")
+    bot.send_message(voter_id, f"Вы проголосовали за {players[target_id]['name']}")
 
-    if len(votes) == len([player for player in players.values() if player['alive']]):
-        tally_votes(callback_query.message.chat.id, bot)
+    if len(votes) == len(players):
+        end_day_phase(call.message.chat.id, bot)
 
-def tally_votes(chat_id, bot):
+
+def end_day_phase(chat_id, bot):
+    global votes
     vote_counts = {}
     for target_id in votes.values():
         if target_id in vote_counts:
@@ -160,52 +165,68 @@ def tally_votes(chat_id, bot):
         else:
             vote_counts[target_id] = 1
 
-    if vote_counts:
-        most_voted = max(vote_counts, key=vote_counts.get)
-        players[most_voted]['alive'] = False
-        bot.send_message(chat_id, f"Игрок {players[most_voted]['name']} был изгнан. Его роль: {players[most_voted]['role']}")
+    max_votes = max(vote_counts.values())
+    to_eliminate = [target_id for target_id, count in vote_counts.items() if count == max_votes]
 
-    check_game_end(chat_id, bot)
-
-def check_game_end(chat_id, bot):
-    mafia_count = sum(1 for player in players.values() if player['role'] == 'mafia' and player['alive'])
-    citizen_count = sum(1 for player in players.values() if player['role'] != 'mafia' and player['alive'])
-
-    if mafia_count >= citizen_count:
-        bot.send_message(chat_id, "Мафия побеждает!")
-        end_game(chat_id, "mafia", bot)
-    elif mafia_count == 0:
-        bot.send_message(chat_id, "Мирные жители побеждают!")
-        end_game(chat_id, "citizens", bot)
+    if len(to_eliminate) == 1:
+        eliminated_id = to_eliminate[0]
     else:
-        bot.send_message(chat_id, "Игра продолжается. Начинается ночь.")
-        night_phase(chat_id, bot)
+        eliminated_id = random.choice(to_eliminate)
 
-def end_game(chat_id, winner, bot):
-    global game_in_progress, players
+    bot.send_message(chat_id, f"{players[eliminated_id]['name']} был изгнан. Он был {roles[eliminated_id]}.")
+    del players[eliminated_id]
+    del roles[eliminated_id]
+
+    check_win_condition(chat_id, bot)
+
+
+def check_win_condition(chat_id, bot):
+    mafia_count = sum(1 for role in roles.values() if role == 'Мафия')
+    non_mafia_count = len(players) - mafia_count
+
+    if mafia_count >= non_mafia_count:
+        bot.send_message(chat_id, "Мафия победила!")
+        end_game()
+    elif mafia_count == 0:
+        bot.send_message(chat_id, "Мирные жители победили!")
+        end_game()
+    else:
+        start_night_phase(chat_id, bot)
+
+
+def monitor_inactivity():
+    while True:
+        now = datetime.now()
+        for player_id, player_info in list(players.items()):
+            last_active = player_info.get('last_active')
+            if last_active and now - last_active > INACTIVITY_TIMEOUT:
+                end_game_due_to_inactivity(player_id)
+                break
+        time.sleep(60)
+
+
+def end_game_due_to_inactivity(inactive_player_id):
+    global game_in_progress
     game_in_progress = False
-    update_stats(winner)
+    for player_id, player_info in players.items():
+        bot_instance.send_message(player_id,
+                                  f"Игра завершена из-за неактивности игрока {players[inactive_player_id]['name']}.")
     players.clear()
-    save_game_data()
-    bot.send_message(chat_id, "Игра окончена. Вы можете начать новую игру с помощью команды /start.")
+    roles.clear()
+    votes.clear()
+    night_actions.clear()
 
-def update_stats(winner):
-    global players, db_lock
-    with db_lock:
-        conn = sqlite3.connect('mafia_stats.db')
-        cursor = conn.cursor()
-        for player_id in players:
-            cursor.execute("SELECT games_played, games_won FROM player_stats WHERE player_id=?", (player_id,))
-            result = cursor.fetchone()
-            if result:
-                games_played, games_won = result
-                games_played += 1
-                if (winner == "mafia" and players[player_id]['role'] == 'mafia') or (winner == "citizens" and players[player_id]['role'] != 'mafia'):
-                    games_won += 1
-                cursor.execute("UPDATE player_stats SET games_played=?, games_won=? WHERE player_id=?", (games_played, games_won, player_id))
-            else:
-                games_played = 1
-                games_won = 1 if (winner == "mafia" and players[player_id]['role'] == 'mafia') or (winner == "citizens" and players[player_id]['role'] != 'mafia') else 0
-                cursor.execute("INSERT INTO player_stats (player_id, games_played, games_won) VALUES (?, ?, ?)", (player_id, games_played, games_won))
-        conn.commit()
-        conn.close()
+
+def end_game():
+    global game_in_progress
+    game_in_progress = False
+    for player_id in players.keys():
+        bot_instance.send_message(player_id, "Игра завершена.")
+    players.clear()
+    roles.clear()
+    votes.clear()
+    night_actions.clear()
+
+
+inactivity_thread = threading.Thread(target=monitor_inactivity, daemon=True)
+inactivity_thread.start()
