@@ -1,17 +1,17 @@
 import logging
-import sqlite3
-
 import telebot
 from datetime import datetime
+from telebot import types
+import threading
 from game import (
     load_game_data, save_game_data, start_new_game, handle_night_action_callback,
-    handle_vote, players, game_in_progress, check_player_count
+    handle_vote, players, game_in_progress, check_player_count, monitor_inactivity, update_last_active, bot_instance
 )
 
-API_TOKEN = ''
+API_TOKEN = 'YOUR_TELEGRAM_BOT_TOKEN'
 bot = telebot.TeleBot(API_TOKEN)
+bot_instance = bot
 
-# логи
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -28,7 +28,7 @@ def start_game(message):
 
     players.clear()
     game_in_progress = False
-    bot.send_message(chat_id, "Игра 'Мафия' начинается! Чтобы присоедениться, напишите /join.")
+    bot.send_message(chat_id, "Игра 'Мафия' начинается! Все желающие присоединиться, напишите /join.")
 
 
 @bot.message_handler(commands=['join'])
@@ -50,24 +50,10 @@ def join(message):
         players[player_id] = {
             'name': message.from_user.first_name,
             'last_active': datetime.now(),
+            'chat_id': chat_id
         }
         bot.send_message(chat_id, f"{message.from_user.first_name} присоединился к игре.")
         save_game_data()
-
-
-@bot.message_handler(commands=['stats'])
-def show_stats(message):
-    player_id = message.from_user.id
-    with sqlite3.connect('mafia_stats.db') as conn:
-        cursor = conn.cursor()
-        cursor.execute("SELECT games_played, games_won FROM player_stats WHERE player_id=?", (player_id,))
-        result = cursor.fetchone()
-
-    if result:
-        games_played, games_won = result
-        bot.send_message(message.chat.id, f"Игр сыграно: {games_played}\nИгр выиграно: {games_won}")
-    else:
-        bot.send_message(message.chat.id, "Вы еще не играли в эту игру.")
 
 
 @bot.message_handler(commands=['begin'])
@@ -86,6 +72,16 @@ def handle_night_action(call):
 def handle_vote_action(call):
     handle_vote(call, bot)
 
+
+# обновление мониторинга активности
+def update_last_active(player_id):
+    if player_id in players:
+        players[player_id]['last_active'] = datetime.now()
+
+
+@bot.message_handler(func=lambda message: True)
+def handle_all_messages(message):
+    update_last_active(message.from_user.id)
 
 
 bot.polling(none_stop=True)
