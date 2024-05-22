@@ -127,21 +127,22 @@ def end_night_phase(chat_id, bot):
 
     check_result = f"{players[check_target]['name']} является {roles[check_target]}."
 
+    bot.send_message(chat_id, kill_result)
     for player_id, role in roles.items():
         if role == 'Комиссар':
             bot.send_message(player_id, check_result)
-        elif role == 'Мафия':
-            bot.send_message(player_id, kill_result)
 
-    bot.send_message(chat_id, kill_result)
     check_win_condition(chat_id, bot)
+    start_day_phase(chat_id, bot)
 
 
 def start_day_phase(chat_id, bot):
-    markup = types.InlineKeyboardMarkup()
     for player_id, player_info in players.items():
-        markup.add(types.InlineKeyboardButton(text=player_info['name'], callback_data=f'vote_{player_id}'))
-    bot.send_message(chat_id, "День начался. Голосуйте за подозреваемого:", reply_markup=markup)
+        markup = types.InlineKeyboardMarkup()
+        for target_id, target_info in players.items():
+            if target_id != player_id:
+                markup.add(types.InlineKeyboardButton(text=target_info['name'], callback_data=f'vote_{target_id}'))
+        bot.send_message(player_id, "День начался. Голосуйте за подозреваемого:", reply_markup=markup)
 
 
 def handle_vote(call, bot):
@@ -156,7 +157,7 @@ def handle_vote(call, bot):
         end_day_phase(call.message.chat.id, bot)
 
 
-def end_day_phase(chat_id, bot):
+def end_day_phase(chat_id, bot): #надо чат айди в json переделать чтобы не в лс последнему голосовавшему слал а в общую группу
     global votes
     vote_counts = {}
     for target_id in votes.values():
@@ -180,7 +181,7 @@ def end_day_phase(chat_id, bot):
     check_win_condition(chat_id, bot)
 
 
-def check_win_condition(chat_id, bot):
+def check_win_condition(chat_id, bot): #здесь тоже самое переделать
     mafia_count = sum(1 for role in roles.values() if role == 'Мафия')
     non_mafia_count = len(players) - mafia_count
 
@@ -191,7 +192,7 @@ def check_win_condition(chat_id, bot):
         bot.send_message(chat_id, "Мирные жители победили!")
         end_game()
     else:
-        start_night_phase(chat_id, bot)
+        start_day_phase(chat_id, bot)
 
 
 def monitor_inactivity():
@@ -226,6 +227,11 @@ def end_game():
     roles.clear()
     votes.clear()
     night_actions.clear()
+
+
+def update_last_active(player_id):
+    if player_id in players:
+        players[player_id]['last_active'] = datetime.now()
 
 
 inactivity_thread = threading.Thread(target=monitor_inactivity, daemon=True)
