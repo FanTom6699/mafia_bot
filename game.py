@@ -1,16 +1,20 @@
 import threading
 import time
 import random
-from datetime import datetime, timedelta
-from telebot import types
+from datetime import datetime
+from telebot import types, TeleBot
+from config import (API_TOKEN, MIN_USER_IN_GAME,
+                    MAX_USER_IN_GAME, LOSE_MAFIA,
+                    INACTIVITY_TIMEOUT)
 
 players = {}
 roles = {}
 votes = {}
 night_actions = {}
 game_in_progress = False
-INACTIVITY_TIMEOUT = timedelta(minutes=5)
-bot_instance = None
+
+
+bot = TeleBot(API_TOKEN)
 
 
 def load_game_data():
@@ -21,33 +25,32 @@ def save_game_data():
     pass
 
 
-def check_player_count(chat_id, bot):
-    if len(players) < 5:
+def check_player_count(chat_id):
+    if len(players) < MIN_USER_IN_GAME:
         bot.send_message(chat_id, "Для начала игры требуется минимум 5 игроков.")
         return False
-    elif len(players) > 8:
+    elif len(players) > MAX_USER_IN_GAME:
         bot.send_message(chat_id, "Максимальное количество игроков - 8.")
         return False
     return True
 
 
-def start_new_game(chat_id, bot):
+def start_new_game(chat_id):
     global game_in_progress, roles, votes, night_actions
     game_in_progress = True
-    roles = assign_roles(players)
+    assign_roles()
     votes = {}
     night_actions = {}
     for player_id, role in roles.items():
         bot.send_message(player_id, f"Ваша роль: {role}")
     bot.send_message(chat_id, "Игра началась! Ночь начинается.")
-    start_night_phase(chat_id, bot)
+    start_night_phase(chat_id)
 
 
-def assign_roles(players):
+def assign_roles():  # JSON DATABASE
     player_ids = list(players.keys())
     random.shuffle(player_ids)
     num_players = len(player_ids)
-    roles = {}
 
     if num_players >= 5:
         roles[player_ids[0]] = 'Мафия'
@@ -62,10 +65,8 @@ def assign_roles(players):
     if num_players == 8:
         roles[player_ids[5]] = 'Мирный житель'
 
-    return roles
 
-
-def start_night_phase(chat_id, bot):
+def start_night_phase(chat_id):
     global night_actions
     night_actions = {'Мафия': None, 'Доктор': None, 'Комиссар': None}
     bot.send_message(chat_id,
@@ -94,7 +95,7 @@ def start_night_phase(chat_id, bot):
             bot.send_message(player_id, "Выберите цель для проверки:", reply_markup=markup)
 
 
-def handle_night_action_callback(call, bot):
+def handle_night_action_callback(call):
     global night_actions
     action, target_id = call.data.split('_')[1], int(call.data.split('_')[2])
     player_id = call.from_user.id
@@ -110,10 +111,10 @@ def handle_night_action_callback(call, bot):
     bot.send_message(player_id, f"Вы выбрали {players[target_id]['name']}")
 
     if all(action is not None for action in night_actions.values()):
-        end_night_phase(call.message.chat.id, bot)
+        end_night_phase(call.message.chat.id)
 
 
-def end_night_phase(chat_id, bot):
+def end_night_phase(chat_id):
     global night_actions
     kill_target = night_actions['Мафия']
     save_target = night_actions['Доктор']
@@ -132,11 +133,11 @@ def end_night_phase(chat_id, bot):
         if role == 'Комиссар':
             bot.send_message(player_id, check_result)
 
-    check_win_condition(chat_id, bot)
-    start_day_phase(chat_id, bot)
+    check_win_condition(chat_id)
+    start_day_phase()
 
 
-def start_day_phase(chat_id, bot):
+def start_day_phase():
     for player_id, player_info in players.items():
         markup = types.InlineKeyboardMarkup()
         for target_id, target_info in players.items():
@@ -145,7 +146,7 @@ def start_day_phase(chat_id, bot):
         bot.send_message(player_id, "День начался. Голосуйте за подозреваемого:", reply_markup=markup)
 
 
-def handle_vote(call, bot):
+def handle_vote(call):
     global votes
     voter_id = call.from_user.id
     target_id = int(call.data.split('_')[1])
@@ -154,10 +155,10 @@ def handle_vote(call, bot):
     bot.send_message(voter_id, f"Вы проголосовали за {players[target_id]['name']}")
 
     if len(votes) == len(players):
-        end_day_phase(call.message.chat.id, bot)
+        end_day_phase(call.message.chat.id)
 
 
-def end_day_phase(chat_id, bot): #надо чат айди в json переделать чтобы не в лс последнему голосовавшему слал а в общую группу
+def end_day_phase(chat_id):  # надо чат айди в json переделать чтобы не в лс последнему голосовавшему слал а в общую группу
     global votes
     vote_counts = {}
     for target_id in votes.values():
@@ -178,21 +179,21 @@ def end_day_phase(chat_id, bot): #надо чат айди в json переде�
     del players[eliminated_id]
     del roles[eliminated_id]
 
-    check_win_condition(chat_id, bot)
+    check_win_condition(chat_id)
 
 
-def check_win_condition(chat_id, bot): #здесь тоже самое переделать
+def check_win_condition(chat_id):  # здесь тоже самое переделать
     mafia_count = sum(1 for role in roles.values() if role == 'Мафия')
     non_mafia_count = len(players) - mafia_count
 
     if mafia_count >= non_mafia_count:
         bot.send_message(chat_id, "Мафия победила!")
         end_game()
-    elif mafia_count == 0:
+    elif mafia_count == LOSE_MAFIA:
         bot.send_message(chat_id, "Мирные жители победили!")
         end_game()
     else:
-        start_day_phase(chat_id, bot)
+        start_day_phase()
 
 
 def monitor_inactivity():
@@ -210,8 +211,8 @@ def end_game_due_to_inactivity(inactive_player_id):
     global game_in_progress
     game_in_progress = False
     for player_id, player_info in players.items():
-        bot_instance.send_message(player_id,
-                                  f"Игра завершена из-за неактивности игрока {players[inactive_player_id]['name']}.")
+        bot.send_message(player_id,
+                         f"Игра завершена из-за неактивности игрока {players[inactive_player_id]['name']}.")
     players.clear()
     roles.clear()
     votes.clear()
@@ -222,7 +223,7 @@ def end_game():
     global game_in_progress
     game_in_progress = False
     for player_id in players.keys():
-        bot_instance.send_message(player_id, "Игра завершена.")
+        bot.send_message(player_id, "Игра завершена.")
     players.clear()
     roles.clear()
     votes.clear()
