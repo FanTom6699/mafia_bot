@@ -1,7 +1,10 @@
+import os
 from datetime import timedelta
+from dotenv import load_dotenv
 
+load_dotenv()
 
-API_TOKEN = '6856455548:AAFetLGe-1CRBAT_w4J8iDbJ5qfTKfr2gEo'
+API_TOKEN = os.getenv('TOKEN')
 
 INACTIVITY_TIMEOUT = timedelta(minutes=5)
 
