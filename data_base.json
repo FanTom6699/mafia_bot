@@ -1,7 +1,14 @@
 {
-  "chat_id": {
-    "chat": {
-      "players":{}
+    "chat_id": {
+        "chat": {
+            "players": {},
+            "game_in_progress": false
+        },
+        "1132935960": {
+            "players": {},
+            "game_in_progress": false,
+            "night_actions": {},
+            "votes": {}
+        }
     }
-  }
 }
