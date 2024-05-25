@@ -1,10 +1,9 @@
 import logging
 import telebot
 from time import time
-import threading
 from game import (start_new_game, handle_night_action_callback,
                   handle_vote, check_player_count,
-                  monitor_inactivity, update_last_active
+                  update_last_active
                   )
 from config import API_TOKEN, MAX_USER_IN_GAME, MARKUP_TG
 from db.sqlite.repository import DataBase
@@ -118,9 +117,6 @@ def handle_vote_action(call):
 def handle_all_messages(message):
     update_last_active(str(message.from_user.id), str(message.chat.id), message.message_id)
 
-
-inactivity_thread = threading.Thread(target=monitor_inactivity, daemon=True)
-inactivity_thread.start()
 
 if __name__ == "__main__":
     bot.infinity_polling()
