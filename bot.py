@@ -100,7 +100,7 @@ def begin_game(message):
     if not data["chat_id"][chat_id]["game_in_progress"] and check_player_count(chat_id, data):
         for user_id in data["chat_id"][chat_id]["players"]:
             data["chat_id"][chat_id]["players"][user_id]["last_active"] = time()
-        #table_chat.save_json_file_and_write(data)
+        table_chat.save_json_file_and_write(data)
         start_new_game(chat_id)
 
 

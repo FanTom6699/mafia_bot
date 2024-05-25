@@ -99,7 +99,8 @@ def start_night_phase(chat_id):
 def handle_night_action_callback(call):
     data = table_chat.open_json_file_and_write()
     action, target_id, chat_id = call.data.split('_')[1], call.data.split('_')[2], call.data.split('_')[3]
-    player_id = str(call.from_user.id)
+    player_id = str(call.message.chat.id)
+    data["chat_id"][chat_id]["players"][player_id]['last_active'] = time()
     role = data["chat_id"][chat_id]["players"][player_id]["roles"]
 
     if role == 'Мафия' and action == 'kill':
@@ -117,7 +118,6 @@ def handle_night_action_callback(call):
 
 
 def end_night_phase(chat_id):
-    # global night_actions
     data = table_chat.open_json_file_and_write()
     kill_target = data["chat_id"][chat_id]["night_actions"]['Мафия']
     save_target = data["chat_id"][chat_id]["night_actions"]['Доктор']
@@ -140,31 +140,33 @@ def end_night_phase(chat_id):
         if role["roles"] == 'Комиссар':
             bot.send_message(player_id, check_result)
 
-    check_win_condition(chat_id)
     table_chat.save_json_file_and_write(data)
+    check_win_condition(chat_id)
     start_day_phase(chat_id)
 
 
 def start_day_phase(chat_id):
     data = table_chat.open_json_file_and_write()
+    bot.send_message(chat_id, "День начался. Дается одна минута на переговоры.")
+    sleep(60)
     for player_id, player_info in data["chat_id"][chat_id]["players"].items():
         markup = types.InlineKeyboardMarkup()
         for target_id, target_info in data["chat_id"][chat_id]["players"].items():
             if target_id != player_id:
                 markup.add(
                     types.InlineKeyboardButton(text=target_info['name'], callback_data=f'vote_{target_id}_{chat_id}'))
-        bot.send_message(chat_id, "День начался. Дается одна минута на переговоры.")
-        sleep(60)
-        bot.send_message(chat_id, "Голосование в лс", reply_markup=MARKUP_TG)
         bot.send_message(player_id, "Голосуйте за подозреваемого:", reply_markup=markup)
+    bot.send_message(chat_id, "Голосование в лс", reply_markup=MARKUP_TG)
+    data["chat_id"][chat_id]["votes"] = {}
+    table_chat.save_json_file_and_write(data)
 
 
 def handle_vote(call):
     data = table_chat.open_json_file_and_write()
-    voter_id = str(call.from_user.id)
+    voter_id = str(call.message.chat.id)
     target_id = call.data.split('_')[1]
     chat_id = call.data.split('_')[2]
-    data["chat_id"][chat_id]["votes"] = {}
+    data["chat_id"][chat_id]["players"][voter_id]['last_active'] = time()
     data["chat_id"][chat_id]["votes"][voter_id] = target_id
     bot.send_message(voter_id, f"Вы проголосовали за {data['chat_id'][chat_id]['players'][target_id]['name']}")
     table_chat.save_json_file_and_write(data)
@@ -206,7 +208,6 @@ def end_day_phase(chat_id):
 def check_win_condition(chat_id):  # здесь тоже самое переделать
     data = table_chat.open_json_file_and_write()
     mafia_count = sum(1 for role in data["chat_id"][chat_id]["players"].values() if role["roles"] == 'Мафия')
-    print(mafia_count)
     non_mafia_count = len(data["chat_id"][chat_id]["players"]) - mafia_count
 
     if mafia_count >= non_mafia_count:
@@ -261,7 +262,7 @@ def update_last_active(player_id, chat_id_user, message_id):
             data["chat_id"][chat_id]["players"][player_id]['last_active'] = time()
             table_chat.save_json_file_and_write(data)
             return
-    if chat_id_user[0] == "-":
+    if chat_id_user[0] in data["chat_id"] and data["chat_id"][chat_id_user]["game_in_progress"]:
         bot.delete_message(chat_id_user, message_id)
         bot.restrict_chat_member(chat_id_user, player_id,
                                  until_date=int(time()) + 3600)
