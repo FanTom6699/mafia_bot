@@ -10,24 +10,16 @@ from db.sqlite.repository import DataBase
 from db.sqlite.schema import TABLE_NAME_USERS, USERS_TABLE_CREATE
 from db.json.dynamic_database import Json
 
-players = {}
-roles = {}
-votes = {}
-night_actions = {}
-game_in_progress = False
+# players = {}
+# roles = {}
+# votes = {}
+# night_actions = {}
+# game_in_progress = False
 
 table_chat = Json()
 table_users = DataBase(TABLE_NAME_USERS, USERS_TABLE_CREATE)
 
 bot = TeleBot(API_TOKEN)
-
-
-def load_game_data():
-    pass
-
-
-def save_game_data():
-    pass
 
 
 def check_player_count(chat_id, data):
@@ -117,25 +109,25 @@ def handle_night_action_callback(call):
     role = data["chat_id"][chat_id]["players"][player_id]["roles"]
 
     if role == 'Мафия' and action == 'kill':
-        data["chat_id"][chat_id][night_actions]['Мафия'] = target_id
+        data["chat_id"][chat_id]["night_actions"]['Мафия'] = target_id
     elif role == 'Доктор' and action == 'save':
-        data["chat_id"][chat_id][night_actions]['Доктор'] = target_id
+        data["chat_id"][chat_id]["night_actions"]['Доктор'] = target_id
     elif role == 'Комиссар' and action == 'check':
-        data["chat_id"][chat_id][night_actions]['Комиссар'] = target_id
+        data["chat_id"][chat_id]["night_actions"]['Комиссар'] = target_id
 
-    bot.send_message(int(player_id), f"Вы выбрали {players[target_id]['name']}")
+    bot.send_message(int(player_id), f"Вы выбрали {data['chat_id'][chat_id]['players'][target_id]['name']}")
     table_chat.save_json_file_and_write(data)
 
-    if all(action is not None for action in data["chat_id"][chat_id][night_actions].values()):
+    if all(action is not None for action in data["chat_id"][chat_id]["night_actions"].values()):
         end_night_phase(chat_id)
 
 
 def end_night_phase(chat_id):
     # global night_actions
     data = table_chat.open_json_file_and_write()
-    kill_target = data["chat_id"][chat_id][night_actions]['Мафия']
-    save_target = data["chat_id"][chat_id][night_actions]['Доктор']
-    check_target = data["chat_id"][chat_id][night_actions]['Комиссар']
+    kill_target = data["chat_id"][chat_id]["night_actions"]['Мафия']
+    save_target = data["chat_id"][chat_id]["night_actions"]['Доктор']
+    check_target = data["chat_id"][chat_id]["night_actions"]['Комиссар']
     kill_result = 'Никто не был убит.'
 
     if kill_target != save_target:
@@ -179,10 +171,10 @@ def handle_vote(call):
     chat_id = call.data.split('_')[2]
 
     data["chat_id"][chat_id]["votes"][voter_id] = target_id
-    bot.send_message(int(voter_id), f"Вы проголосовали за {players[target_id]['name']}")
+    bot.send_message(int(voter_id), f"Вы проголосовали за {data['chat_id'][chat_id]['players'][target_id]['name']}")
     table_chat.save_json_file_and_write(data)
 
-    if len(data["chat_id"][chat_id][votes]) == len(players):
+    if len(data["chat_id"][chat_id]["votes"]) == len(data['chat_id'][chat_id]['players']):
         end_day_phase(chat_id)
 
 
@@ -205,7 +197,7 @@ def end_day_phase(chat_id):
         eliminated_id = random.choice(to_eliminate)
 
     bot.send_message(int(chat_id),
-                     f'{data["chat_id"][chat_id]["players"][eliminated_id]["name"]} был изгнан. Он был {roles[eliminated_id]}.')
+                     f'{data["chat_id"][chat_id]["players"][eliminated_id]["name"]} был изгнан. Он был {data["chat_id"][chat_id]["players"][eliminated_id]["roles"]}.')
     del data["chat_id"][chat_id]["players"][eliminated_id]
     table_chat.save_json_file_and_write(data)
     # del roles[eliminated_id]
@@ -255,8 +247,10 @@ def end_game(chat_id):
 
 def update_last_active(player_id):
     data = table_chat.open_json_file_and_write()  # SQL
-    if player_id in players:
-        players[player_id]['last_active'] = datetime.now()
+    for chat_id in data["chat_id"]:
+        if player_id in data["chat_id"][chat_id]["players"]:
+            data["chat_id"][chat_id]["players"][player_id]['last_active'] = datetime.now()
+    table_chat.save_json_file_and_write(data)
 
 
 inactivity_thread = threading.Thread(target=monitor_inactivity, daemon=True)

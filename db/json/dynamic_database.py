@@ -14,13 +14,3 @@ class Json:
     def save_json_file_and_write(self, data):
         with open(self.data_name, 'w', encoding='utf-8') as outfile:
             json.dump(data, outfile, ensure_ascii=False, indent=4)
-
-    def save_text(self, text, message):
-        data = self.open_json_file_and_write()
-        data["users"][message.chat.username] = data["users"][message.chat.username] + text + ". "
-        self.save_json_file_and_write(data)
-
-    def start_json_file(self, message):
-        data = self.open_json_file_and_write()
-        data["users"][message.chat.username] = ""
-        self.save_json_file_and_write(data)
