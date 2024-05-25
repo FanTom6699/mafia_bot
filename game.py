@@ -1,20 +1,13 @@
 import threading
-import time
+from time import time, sleep
 import random
-from datetime import datetime
 from telebot import types, TeleBot
 from config import (API_TOKEN, MIN_USER_IN_GAME,
                     MAX_USER_IN_GAME, LOSE_MAFIA,
-                    INACTIVITY_TIMEOUT)
+                    INACTIVITY_TIMEOUT, MARKUP_TG)
 from db.sqlite.repository import DataBase
 from db.sqlite.schema import TABLE_NAME_USERS, USERS_TABLE_CREATE
 from db.json.dynamic_database import Json
-
-# players = {}
-# roles = {}
-# votes = {}
-# night_actions = {}
-# game_in_progress = False
 
 table_chat = Json()
 table_users = DataBase(TABLE_NAME_USERS, USERS_TABLE_CREATE)
@@ -24,10 +17,10 @@ bot = TeleBot(API_TOKEN)
 
 def check_player_count(chat_id, data):
     if len(data["chat_id"][chat_id]["players"]) < MIN_USER_IN_GAME:
-        bot.send_message(int(chat_id), "Для начала игры требуется минимум 5 игроков.")
+        bot.send_message(int(chat_id), f"Для начала игры требуется минимум {MIN_USER_IN_GAME} игроков.")
         return False
     elif len(data["chat_id"][chat_id]["players"]) > MAX_USER_IN_GAME:
-        bot.send_message(int(chat_id), "Максимальное количество игроков - 8.")
+        bot.send_message(int(chat_id), f"Максимальное количество игроков - {MAX_USER_IN_GAME}.")
         return False
     return True
 
@@ -39,7 +32,9 @@ def start_new_game(chat_id):
     assign_roles(chat_id, data)
     for player_id, role in data["chat_id"][chat_id]["players"].items():
         if "Мафия" in role["roles"] and role["roles"]["Мафия"] is not None:
-            bot.send_message(int(player_id), f'Ваша роль: {role}\n Ваш тиммейт: {role["roles"]["Мафия"]}')
+            bot.send_message(int(player_id), f'Ваша роль: {role}\n Ваш тиммейт: {data["chat_id"][chat_id]["players"][role["roles"]["Мафия"]]["name"]}')
+            data["chat_id"][chat_id]["players"][role["roles"]["Мафия"]]["roles"] = 'Мафия'
+            data["chat_id"][chat_id]["players"][player_id]["roles"] = 'Мафия'
         else:
             bot.send_message(int(player_id), f'Ваша роль: {role}')
     bot.send_message(int(chat_id), "Игра началась! Ночь начинается.")
@@ -73,7 +68,7 @@ def start_night_phase(chat_id):
     data = table_chat.open_json_file_and_write()
     data["chat_id"][chat_id]["night_actions"] = {'Мафия': None, 'Доктор': None, 'Комиссар': None}
     bot.send_message(int(chat_id),
-                     "Ночь наступила. Мафия, Доктор и Комиссар, проверьте свои личные сообщения для выполнения действий.")
+                     "Ночь наступила. Мафия, Доктор и Комиссар, проверьте свои личные сообщения для выполнения действий.", reply_markup=MARKUP_TG)
 
     for player_id, role in data["chat_id"][chat_id]["players"].items():
         if role["roles"] == 'Мафия':
@@ -132,6 +127,9 @@ def end_night_phase(chat_id):
 
     if kill_target != save_target:
         kill_result = f'{data["chat_id"][chat_id]["players"][kill_target]["name"]} был убит.'
+        bot.restrict_chat_member(chat_id, data["chat_id"][chat_id]["players"][kill_target],
+                                 until_date=int(time()) + 3600)
+        data["chat_id"][chat_id]["mute_users"].append(data["chat_id"][chat_id]["players"][kill_target])
         del data["chat_id"][chat_id]["players"][kill_target]
         # del roles[kill_target]
 
@@ -156,10 +154,8 @@ def start_day_phase(chat_id):
                 markup.add(
                     types.InlineKeyboardButton(text=target_info['name'], callback_data=f'vote_{target_id}_{chat_id}'))
         bot.send_message(int(chat_id), "День начался. Дается одна минута на переговоры.", reply_markup=markup)
-        time.sleep(60)
-        markup_day = types.InlineKeyboardMarkup()
-        markup_day.add(types.InlineKeyboardButton(text="Чат с ботом", callback_data='@mor_ten_bot'))
-        bot.send_message(int(chat_id), "День начался. Голосование в лс", reply_markup=markup_day)
+        sleep(60)
+        bot.send_message(int(chat_id), "День начался. Голосование в лс", reply_markup=MARKUP_TG)
         bot.send_message(int(player_id), "День начался. Голосуйте за подозреваемого:", reply_markup=markup)
 
 
@@ -198,6 +194,8 @@ def end_day_phase(chat_id):
 
     bot.send_message(int(chat_id),
                      f'{data["chat_id"][chat_id]["players"][eliminated_id]["name"]} был изгнан. Он был {data["chat_id"][chat_id]["players"][eliminated_id]["roles"]}.')
+    bot.restrict_chat_member(chat_id, data["chat_id"][chat_id]["players"][eliminated_id], until_date=int(time())+3600)
+    data["chat_id"][chat_id]["mute_users"].append(data["chat_id"][chat_id]["players"][eliminated_id])
     del data["chat_id"][chat_id]["players"][eliminated_id]
     table_chat.save_json_file_and_write(data)
     # del roles[eliminated_id]
@@ -222,25 +220,31 @@ def check_win_condition(chat_id):  # здесь тоже самое переде
 def monitor_inactivity():
     while True:
         data = table_chat.open_json_file_and_write()
-        now = datetime.now()
+        now = time()
         for chat_id in data["chat_id"]:
             for player_id, player_info in data["chat_id"][chat_id]["players"].items():
                 last_active = player_info.get('last_active')
                 if last_active and now - last_active > INACTIVITY_TIMEOUT:
                     end_game_due_to_inactivity(player_id, chat_id)
-        time.sleep(60)
+        sleep(60)
 
 
 def end_game_due_to_inactivity(player_id, chat_id):
     data = table_chat.open_json_file_and_write()
     bot.send_message(int(chat_id),
                      f'Игра завершена из-за неактивности игрока {data["chat_id"][chat_id]["players"][player_id]["name"]}.')
+    for user_id in data[chat_id]["mute_users"]:
+        bot.restrict_chat_member(chat_id, user_id, can_send_messages=True, can_send_media_messages=True,
+                                 can_send_other_messages=True, can_add_web_page_previews=True)
     del data["chat_id"][chat_id]
     table_chat.save_json_file_and_write(data)
 
 
 def end_game(chat_id):
     data = table_chat.open_json_file_and_write()
+    for user_id in data[chat_id]["mute_users"]:
+        bot.restrict_chat_member(chat_id, user_id, can_send_messages=True, can_send_media_messages=True,
+                                 can_send_other_messages=True, can_add_web_page_previews=True)
     del data["chat_id"][chat_id]
     table_chat.save_json_file_and_write(data)
 
@@ -249,7 +253,7 @@ def update_last_active(player_id):
     data = table_chat.open_json_file_and_write()  # SQL
     for chat_id in data["chat_id"]:
         if player_id in data["chat_id"][chat_id]["players"]:
-            data["chat_id"][chat_id]["players"][player_id]['last_active'] = datetime.now()
+            data["chat_id"][chat_id]["players"][player_id]['last_active'] = time()
     table_chat.save_json_file_and_write(data)
 
 

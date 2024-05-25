@@ -1,13 +1,12 @@
 import logging
 import telebot
-from datetime import datetime
 from time import time
 import threading
 from game import (start_new_game, handle_night_action_callback,
                   handle_vote, check_player_count,
                   monitor_inactivity, update_last_active
                   )
-from config import API_TOKEN, MAX_USER_IN_GAME
+from config import API_TOKEN, MAX_USER_IN_GAME, MARKUP_TG
 from db.sqlite.repository import DataBase
 from db.sqlite.schema import TABLE_NAME_USERS, USERS_TABLE_CREATE
 from db.json.dynamic_database import Json
@@ -25,12 +24,12 @@ logger = logging.getLogger(__name__)
 @bot.message_handler(commands=['start'])
 def start(message):
     chat_id = message.chat.id
-    if str(chat_id[0]) == "-":
-        bot.send_message(chat_id, "Данная команда работает только в лс бота")
+    if str(chat_id)[0] == "-":
+        bot.send_message(chat_id, "Данная команда работает только в лс бота", reply_markup=MARKUP_TG)
         return
     result = table_users.get_data("user_id", message.from_user.id)
     if not result:
-        table_users.create_user(message.from_user.id, time(), 0, 0)
+        table_users.create_user(message.from_user.id, 0, 0)
         bot.send_message(chat_id, "Вы авторизованы, можете играть в мафию.")
     else:
         bot.send_message(chat_id, "Вы уже авторизованы.")
@@ -46,7 +45,8 @@ def start_game(message):
     data["chat_id"][chat_id] = {"players": {},
                                 "game_in_progress": False,
                                 "night_actions": {},
-                                "votes": {}}
+                                "votes": {},
+                                "mute_users": []}
     table_chat.save_json_file_and_write(data)
     bot.send_message(chat_id, "Игра 'Мафия' начинается! Все желающие присоединиться, напишите /join.")
 
@@ -82,7 +82,7 @@ def join(message):
     else:
         data["chat_id"][chat_id]["players"][player_id] = {
             'name': message.from_user.first_name,
-            'last_active': datetime.now(),
+            'last_active': time(),
             "role": None
         }
         bot.send_message(chat_id, f"{message.from_user.first_name} присоединился к игре.")
