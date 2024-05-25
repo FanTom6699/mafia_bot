@@ -116,7 +116,7 @@ def handle_vote_action(call):
 
 @bot.message_handler(func=lambda message: True)
 def handle_all_messages(message):
-    update_last_active(str(message.from_user.id), str(message.chat.id))
+    update_last_active(str(message.from_user.id), str(message.chat.id), message.message_id)
 
 
 inactivity_thread = threading.Thread(target=monitor_inactivity, daemon=True)

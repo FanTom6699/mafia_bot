@@ -98,7 +98,6 @@ def start_night_phase(chat_id):
 
 def handle_night_action_callback(call):
     data = table_chat.open_json_file_and_write()
-    # global night_actions
     action, target_id, chat_id = call.data.split('_')[1], call.data.split('_')[2], call.data.split('_')[3]
     player_id = str(call.from_user.id)
     role = data["chat_id"][chat_id]["players"][player_id]["roles"]
@@ -129,12 +128,10 @@ def end_night_phase(chat_id):
         kill_result = f'{data["chat_id"][chat_id]["players"][kill_target]["name"]} был убит.'
         user_status = bot.get_chat_administrators(chat_id)
         if kill_target not in user_status:
-            pass
-            # bot.restrict_chat_member(chat_id, kill_target,
-            # until_date=int(time()) + 3600)
-            # data["chat_id"][chat_id]["mute_users"].append(kill_target)
+            bot.restrict_chat_member(chat_id, kill_target,
+                                     until_date=int(time()) + 3600)
+            data["chat_id"][chat_id]["mute_users"].append(kill_target)
         del data["chat_id"][chat_id]["players"][kill_target]
-        # del roles[kill_target]
 
     check_result = f'{data["chat_id"][chat_id]["players"][check_target]["name"]} является {data["chat_id"][chat_id]["players"][check_target]["roles"]}.'
 
@@ -164,11 +161,10 @@ def start_day_phase(chat_id):
 
 def handle_vote(call):
     data = table_chat.open_json_file_and_write()
-    # global votes
     voter_id = str(call.from_user.id)
     target_id = call.data.split('_')[1]
     chat_id = call.data.split('_')[2]
-
+    data["chat_id"][chat_id]["votes"] = {}
     data["chat_id"][chat_id]["votes"][voter_id] = target_id
     bot.send_message(voter_id, f"Вы проголосовали за {data['chat_id'][chat_id]['players'][target_id]['name']}")
     table_chat.save_json_file_and_write(data)
@@ -179,7 +175,6 @@ def handle_vote(call):
 
 def end_day_phase(chat_id):
     data = table_chat.open_json_file_and_write()  # надо чат айди в json переделать чтобы не в лс последнему голосовавшему слал а в общую группу
-    # global votes
     vote_counts = {}
     for target_id in data["chat_id"][chat_id]["votes"].values():
         if target_id in vote_counts:
@@ -199,28 +194,30 @@ def end_day_phase(chat_id):
                      f'{data["chat_id"][chat_id]["players"][eliminated_id]["name"]} был изгнан. Он был {data["chat_id"][chat_id]["players"][eliminated_id]["roles"]}.')
     user_status = bot.get_chat_administrators(chat_id)
     if eliminated_id not in user_status:
-        # bot.restrict_chat_member(chat_id, eliminated_id, until_date=int(time()) + 3600)
-        # data["chat_id"][chat_id]["mute_users"].append(eliminated_id)
-        pass
+        bot.restrict_chat_member(chat_id, eliminated_id, until_date=int(time()) + 3600)
+        data["chat_id"][chat_id]["mute_users"].append(eliminated_id)
     del data["chat_id"][chat_id]["players"][eliminated_id]
     table_chat.save_json_file_and_write(data)
-    # del roles[eliminated_id]
 
-    check_win_condition(chat_id)
-    start_night_phase(chat_id)
+    if check_win_condition(chat_id):
+        start_night_phase(chat_id)
 
 
 def check_win_condition(chat_id):  # здесь тоже самое переделать
     data = table_chat.open_json_file_and_write()
     mafia_count = sum(1 for role in data["chat_id"][chat_id]["players"].values() if role["roles"] == 'Мафия')
+    print(mafia_count)
     non_mafia_count = len(data["chat_id"][chat_id]["players"]) - mafia_count
 
     if mafia_count >= non_mafia_count:
         bot.send_message(chat_id, "Мафия победила!")
         end_game(chat_id)
+        return False
     elif mafia_count == LOSE_MAFIA:
         bot.send_message(chat_id, "Мирные жители победили!")
         end_game(chat_id)
+        return False
+    return True
 
 
 def monitor_inactivity():
@@ -257,7 +254,7 @@ def end_game(chat_id):
     table_chat.save_json_file_and_write(data)
 
 
-def update_last_active(player_id, chat_id_user):
+def update_last_active(player_id, chat_id_user, message_id):
     data = table_chat.open_json_file_and_write()  # SQL
     for chat_id in data["chat_id"]:
         if player_id in data["chat_id"][chat_id]["players"]:
@@ -265,6 +262,7 @@ def update_last_active(player_id, chat_id_user):
             table_chat.save_json_file_and_write(data)
             return
     if chat_id_user[0] == "-":
+        bot.delete_message(chat_id_user, message_id)
         bot.restrict_chat_member(chat_id_user, player_id,
                                  until_date=int(time()) + 3600)
         data["chat_id"][chat_id_user]["mute_users"].append(player_id)
