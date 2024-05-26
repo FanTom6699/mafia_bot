@@ -121,7 +121,6 @@ def handle_night_action_callback(call):
         data["chat_id"][chat_id]["night_actions"]['Доктор'] = target_id
     elif role == 'Комиссар' and action == 'check':
         data["chat_id"][chat_id]["night_actions"]['Комиссар'] = target_id
-
     bot.send_message(player_id, f"⚙️| Вы выбрали {data['chat_id'][chat_id]['players'][target_id]['name']}")
     table_chat.save_json_file_and_write(data)
 
@@ -135,6 +134,7 @@ def end_night_phase(chat_id):
     save_target = data["chat_id"][chat_id]["night_actions"]['Доктор']
     check_target = data["chat_id"][chat_id]["night_actions"]['Комиссар']
     kill_result = 'Никто не был ☠️.'
+    check_result = f'🔎| {data["chat_id"][chat_id]["players"][check_target]["name"]} является {data["chat_id"][chat_id]["players"][check_target]["roles"]}.'
 
     if kill_target != save_target:
         kill_result = f'{data["chat_id"][chat_id]["players"][kill_target]["name"]} был убит.'
@@ -144,8 +144,6 @@ def end_night_phase(chat_id):
             data["chat_id"][chat_id]["mute_users"].append(kill_target)
         table_users.update_data(kill_target, "lose", 1)
         del data["chat_id"][chat_id]["players"][kill_target]
-
-    check_result = f'🔎| {data["chat_id"][chat_id]["players"][check_target]["name"]} является {data["chat_id"][chat_id]["players"][check_target]["roles"]}.'
 
     bot.send_message(chat_id, kill_result)
     for player_id, role in data["chat_id"][chat_id]["players"].items():
