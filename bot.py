@@ -82,7 +82,7 @@ def join(message):
 
     result = table_users.get_data("user_id", message.from_user.id)
     if not result:
-        bot.send_message(chat_id, "⚙️| Вы не авторизовались в боте.\nНапишите /start боту.", reply_markup=MARKUP_TG)
+        bot.send_message(chat_id, "⚙️| Вы не авторизовались в боте.\nНапишите /start боту в лс.", reply_markup=MARKUP_TG)
         return
 
     if data["chat_id"][chat_id]["game_in_progress"]:
