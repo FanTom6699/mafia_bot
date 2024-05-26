@@ -77,6 +77,10 @@ def start_night_phase(chat_id):
     bot.send_message(chat_id,
                      "🌃| Мафия, Доктор и Комиссар, проверьте свои личные сообщения для выполнения действий.",
                      reply_markup=MARKUP_TG)
+    for player_id in data["chat_id"][chat_id]["players"]:
+        if player_id not in data["chat_id"][chat_id]["admins"]:
+            bot.restrict_chat_member(chat_id, player_id,
+                                     until_date=int(time()) + 3600)
 
     for player_id, role in data["chat_id"][chat_id]["players"].items():
         if role["roles"] == 'Мафия':
@@ -147,6 +151,9 @@ def end_night_phase(chat_id):
     for player_id, role in data["chat_id"][chat_id]["players"].items():
         if role["roles"] == 'Комиссар':
             bot.send_message(player_id, check_result)
+        if player_id not in data["chat_id"][chat_id]["admins"]:
+            bot.restrict_chat_member(chat_id, player_id, can_send_messages=True, can_send_media_messages=True,
+                                     can_send_other_messages=True, can_add_web_page_previews=True)
 
     table_chat.save_json_file_and_write(data)
     check_win_condition(chat_id)
