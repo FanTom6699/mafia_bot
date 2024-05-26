@@ -114,7 +114,12 @@ def get_stats(message):
     stats = table_users.get_data("win, lose", chat_id)[0]
     wins, loses = stats[0], stats[1]
     games = wins + loses
-    bot.send_message(chat_id, f"Твоя статистика:\nКол-во игр: {games}\nПобеды: {wins}\nПоражения: {loses}\n% Побед: {round(wins / games) * 100}")
+    if games > 0:
+        bot.send_message(chat_id,
+                         f"Твоя статистика:\nКол-во игр: {games}\nПобеды: {wins}\nПоражения: {loses}\nВероятность Победы: {round(wins / games) * 100}%")
+    else:
+        bot.send_message(chat_id,
+                         f"Твоя статистика:\nКол-во игр: {games}\nПобеды: {wins}\nПоражения: {loses}\nВероятность Победы: 0%")
 
 
 @bot.message_handler(commands=['begin'])
