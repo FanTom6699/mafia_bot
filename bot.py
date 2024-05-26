@@ -20,6 +20,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
+
 @bot.message_handler(commands=['start'])
 def start(message):
     chat_id = message.chat.id
@@ -29,7 +30,9 @@ def start(message):
     result = table_users.get_data("user_id", message.from_user.id)
     if not result:
         table_users.create_user(message.from_user.id, 0, 0)
-        bot.send_message(chat_id, "Вы авторизованы, можете играть в мафию.")
+        bot.send_message(chat_id, """Привет! Я бот в котором ты можешь поиграть с друзьями в классическую мафию.
+        Как начать? Да очень просто! Нужно меня добавить в вашу группу и выдать права администратора.
+        Нажав /start вы автоматически авторизоавлись в боте и можете играть.""")
     else:
         bot.send_message(chat_id, "Вы уже авторизованы.")
 
