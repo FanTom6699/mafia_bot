@@ -1,6 +1,6 @@
 import logging
 import sqlite3
-from config import DB_NAME_SQLITE
+from cfg.config import DB_NAME_SQLITE
 
 
 class DataBase:

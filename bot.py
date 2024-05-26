@@ -1,12 +1,11 @@
 import logging
 import telebot
 from time import time
-from text_in_bot import *
+from cfg.text_in_bot import *
 from game import (start_new_game, handle_night_action_callback,
                   handle_vote, check_player_count,
-                  update_last_active, get_admins
-                  )
-from config import API_TOKEN, MAX_USER_IN_GAME, MARKUP_TG
+                  update_last_active, get_admins)
+from cfg.config import API_TOKEN, MAX_USER_IN_GAME, MARKUP_TG
 from db.sqlite.repository import DataBase
 from db.sqlite.schema import TABLE_NAME_USERS, USERS_TABLE_CREATE
 from db.json.dynamic_database import Json

@@ -1,5 +1,5 @@
 import json
-from config import DB_NAME_JSON
+from cfg.config import DB_NAME_JSON
 
 
 class Json:
