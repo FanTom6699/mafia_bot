@@ -131,6 +131,7 @@ def end_night_phase(chat_id):
             bot.restrict_chat_member(chat_id, kill_target,
                                      until_date=int(time()) + 3600)
             data["chat_id"][chat_id]["mute_users"].append(kill_target)
+        table_users.update_data(data["chat_id"][chat_id]["players"][kill_target], "lose", 1)
         del data["chat_id"][chat_id]["players"][kill_target]
 
     check_result = f'{data["chat_id"][chat_id]["players"][check_target]["name"]} является {data["chat_id"][chat_id]["players"][check_target]["roles"]}.'
@@ -198,6 +199,7 @@ def end_day_phase(chat_id):
     if eliminated_id not in user_status:
         bot.restrict_chat_member(chat_id, eliminated_id, until_date=int(time()) + 3600)
         data["chat_id"][chat_id]["mute_users"].append(eliminated_id)
+    table_users.update_data(data["chat_id"][chat_id]["players"][eliminated_id], "lose", 1)
     del data["chat_id"][chat_id]["players"][eliminated_id]
     table_chat.save_json_file_and_write(data)
 
@@ -214,8 +216,6 @@ def check_win_condition(chat_id):  # здесь тоже самое переде
         for player_id, role in data["chat_id"][chat_id]["players"].items():
             if role["roles"] == "Мафия":
                 table_users.update_data(player_id, "win", 1)
-            else:
-                table_users.update_data(player_id, "lose", 1)
         end_game(chat_id)
         return False
     elif mafia_count == LOSE_MAFIA:
@@ -223,8 +223,6 @@ def check_win_condition(chat_id):  # здесь тоже самое переде
         for player_id, role in data["chat_id"][chat_id]["players"].items():
             if role["roles"] != "Мафия":
                 table_users.update_data(player_id, "win", 1)
-            else:
-                table_users.update_data(player_id, "lose", 1)
         end_game(chat_id)
         return False
     return True
