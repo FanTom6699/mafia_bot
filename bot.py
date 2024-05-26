@@ -65,7 +65,8 @@ def start_game(message):
                                 "mute_users": [],
                                 "admins": get_admins(chat_id)}
     table_chat.save_json_file_and_write(data)
-    bot.send_message(chat_id, "⚙️| Игра 'Мафия' начинается!\n🔗| Все желающие присоединиться, напишите /join.\n🏁| Начать игру /begin")
+    bot.send_message(chat_id,
+                     "⚙️| Игра 'Мафия' начинается!\n🔗| Все желающие присоединиться, напишите /join.\n🏁| Начать игру /begin")
 
 
 @bot.message_handler(commands=['join'])
@@ -82,7 +83,8 @@ def join(message):
 
     result = table_users.get_data("user_id", message.from_user.id)
     if not result:
-        bot.send_message(chat_id, "⚙️| Вы не авторизовались в боте.\nНапишите /start боту в лс.", reply_markup=MARKUP_TG)
+        bot.send_message(chat_id, "⚙️| Вы не авторизовались в боте.\nНапишите /start боту в лс.",
+                         reply_markup=MARKUP_TG)
         return
 
     if data["chat_id"][chat_id]["game_in_progress"]:
@@ -142,10 +144,17 @@ def get_stats(message):
 @bot.message_handler(commands=['begin'])
 def begin_game(message):
     chat_id = str(message.chat.id)
+    player_id = str(message.from_user.id)
     if chat_id[0] != "-":
         bot.send_message(chat_id, "⚙️| Данная команда работает только в группе")
         return
     data = table_chat.open_json_file_and_write()
+    if chat_id not in data["chat_id"]:
+        bot.send_message(chat_id, "⚙️| Игру еще не создали.")
+        return
+    if player_id not in data["chat_id"][chat_id]["players"]:
+        bot.send_message(chat_id, "⚙️| Вы не зашли в игру. /join")
+        return
     if not data["chat_id"][chat_id]["game_in_progress"] and check_player_count(chat_id, data):
         for user_id in data["chat_id"][chat_id]["players"]:
             data["chat_id"][chat_id]["players"][user_id]["last_active"] = time()
