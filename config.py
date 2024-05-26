@@ -17,4 +17,4 @@ DB_NAME_JSON = 'data_base.json'
 
 
 MARKUP_TG = types.InlineKeyboardMarkup()
-MARKUP_TG.add(types.InlineKeyboardButton(text="Чат с ботом", url='https://t.me/online_mafia_game_bot'))
+MARKUP_TG.add(types.InlineKeyboardButton(text="🤖💬", url='https://t.me/online_mafia_game_bot'))
