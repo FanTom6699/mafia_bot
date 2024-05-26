@@ -89,6 +89,34 @@ def join(message):
         table_chat.save_json_file_and_write(data)
 
 
+@bot.message_handler(commands=['top'])
+def get_top(message):
+    players_name = [i for i in table_users.get_data("user_id")]
+    players_result = table_users.get_data("win")
+    players = dict(sorted({bot.get_chat(players_name[num][0]).first_name: players_result[num][0] for num in
+                           range(len(players_result))}.items(), key=lambda x: x[1], reverse=True))
+    top = "Топ нашего бота:\n"
+    count = 0
+    for player in players:
+        top += f"{player} - {players[player]} побед\n"
+        count += 1
+        if count > 10:
+            break
+    bot.send_message(message.chat.id, top)
+
+
+@bot.message_handler(commands=['stats'])
+def get_stats(message):
+    chat_id = message.chat.id
+    if str(chat_id)[0] == "-":
+        bot.send_message(chat_id, "Данная команда работает только в лс бота", reply_markup=MARKUP_TG)
+        return
+    stats = table_users.get_data("win, lose", chat_id)[0]
+    wins, loses = stats[0], stats[1]
+    games = wins + loses
+    bot.send_message(chat_id, f"Твоя статистика:\nКол-во игр: {games}\nПобеды: {wins}\nПоражения: {loses}\n% Побед: {round(wins / games) * 100}")
+
+
 @bot.message_handler(commands=['begin'])
 def begin_game(message):
     chat_id = str(message.chat.id)

@@ -209,13 +209,22 @@ def check_win_condition(chat_id):  # здесь тоже самое переде
     data = table_chat.open_json_file_and_write()
     mafia_count = sum(1 for role in data["chat_id"][chat_id]["players"].values() if role["roles"] == 'Мафия')
     non_mafia_count = len(data["chat_id"][chat_id]["players"]) - mafia_count
-
     if mafia_count >= non_mafia_count:
         bot.send_message(chat_id, "Мафия победила!")
+        for player_id, role in data["chat_id"][chat_id]["players"].items():
+            if role["roles"] == "Мафия":
+                table_users.update_data(player_id, "win", 1)
+            else:
+                table_users.update_data(player_id, "lose", 1)
         end_game(chat_id)
         return False
     elif mafia_count == LOSE_MAFIA:
         bot.send_message(chat_id, "Мирные жители победили!")
+        for player_id, role in data["chat_id"][chat_id]["players"].items():
+            if role["roles"] != "Мафия":
+                table_users.update_data(player_id, "win", 1)
+            else:
+                table_users.update_data(player_id, "lose", 1)
         end_game(chat_id)
         return False
     return True
