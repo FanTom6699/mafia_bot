@@ -12,8 +12,9 @@ MIN_USER_IN_GAME = 5
 MAX_USER_IN_GAME = 8
 LOSE_MAFIA = 0
 
-DB_NAME_SQLITE = "database.db"
-DB_NAME_JSON = 'data_base.json'
+HOME_DIR = '/home/student/mafia_bot'
+DB_NAME_SQLITE = f"{HOME_DIR}/database.db"
+DB_NAME_JSON = f'{HOME_DIR}/data_base.json'
 
 
 MARKUP_TG = types.InlineKeyboardMarkup()
