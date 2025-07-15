@@ -19,6 +19,16 @@ bot = telebot.TeleBot(API_TOKEN)
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# --- Добавляем команды меню Telegram ---
+    telebot.types.BotCommand("start_game", "Начать игру (группа)"),
+    telebot.types.BotCommand("join", "Присоединиться к игре (группа)"),
+    telebot.types.BotCommand("begin", "Запуск игры (группа)"),
+    telebot.types.BotCommand("cancel", "Отмена игры"),
+    telebot.types.BotCommand("top", "Топ игроков"),
+    telebot.types.BotCommand("stats", "Статистика"),
+    telebot.types.BotCommand("help", "Помощь"),
+    telebot.types.BotCommand("rules", "Правила"),
+])
 
 @bot.message_handler(commands=['start'])
 def handler_start(message):
@@ -34,7 +44,6 @@ def handler_start(message):
     else:
         bot.send_message(chat_id, "⚙️| Вы уже авторизованы.")
 
-
 @bot.message_handler(commands=['help'])
 def handler_help(message):
     chat_id = str(message.chat.id)
@@ -43,12 +52,10 @@ def handler_help(message):
         return
     bot.send_message(chat_id, help_text)
 
-
 @bot.message_handler(commands=['rules'])
 def handler_rules(message):
     chat_id = str(message.chat.id)
     bot.send_message(chat_id, rules_text)
-
 
 @bot.message_handler(commands=['start_game'])  # Проверка на чат это или нет, удаления чата
 def start_game(message):
@@ -67,7 +74,6 @@ def start_game(message):
     table_chat.save_json_file_and_write(data)
     bot.send_message(chat_id,
                      "⚙️| Игра 'Мафия' начинается!\n🔗| Все желающие присоединиться, напишите /join.\n🏁| Начать игру /begin")
-
 
 @bot.message_handler(commands=['join'])
 def join(message):
@@ -107,7 +113,6 @@ def join(message):
         bot.send_message(chat_id, f"🔗| {message.from_user.first_name} присоединился к игре.")
         table_chat.save_json_file_and_write(data)
 
-
 @bot.message_handler(commands=['top'])
 def get_top(message):
     players_name = [i for i in table_users.get_data("user_id")]
@@ -122,7 +127,6 @@ def get_top(message):
         if count > 10:
             break
     bot.send_message(message.chat.id, top)
-
 
 @bot.message_handler(commands=['stats'])
 def get_stats(message):
@@ -139,7 +143,6 @@ def get_stats(message):
     else:
         bot.send_message(chat_id,
                          f"📊| Твоя статистика:\n\n  Кол-во игр: {games}\n\n  🏆: {wins}\n\n  💢: {loses}\n\n  🏆%: 0%")
-
 
 @bot.message_handler(commands=['begin'])
 def begin_game(message):
@@ -161,21 +164,32 @@ def begin_game(message):
         table_chat.save_json_file_and_write(data)
         start_new_game(chat_id)
 
+# --- Добавлен обработчик для отмены игры ---
+@bot.message_handler(commands=['cancel'])
+def cancel_game(message):
+    chat_id = str(message.chat.id)
+    if chat_id[0] != "-":
+        bot.send_message(chat_id, "⚙️| Данная команда работает только в группе")
+        return
+    data = table_chat.open_json_file_and_write()
+    if chat_id not in data["chat_id"]:
+        bot.send_message(chat_id, "⚙️| Нет активной игры для отмены.")
+        return
+    del data["chat_id"][chat_id]
+    table_chat.save_json_file_and_write(data)
+    bot.send_message(chat_id, "🚫| Игра отменена!")
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith('night_'))
 def handle_night_action(call):
     handle_night_action_callback(call)
 
-
 @bot.callback_query_handler(func=lambda call: call.data.startswith('vote_'))
 def handle_vote_action(call):
     handle_vote(call)
 
-
 @bot.message_handler(func=lambda message: True)
 def handle_all_messages(message):
     update_last_active(str(message.from_user.id), str(message.chat.id), message.message_id)
-
 
 if __name__ == "__main__":
     bot.infinity_polling()
