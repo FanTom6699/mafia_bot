@@ -19,16 +19,31 @@ bot = telebot.TeleBot(API_TOKEN)
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# --- Добавляем команды меню Telegram ---
-    telebot.types.BotCommand("start_game", "Начать игру (группа)"),
-    telebot.types.BotCommand("join", "Присоединиться к игре (группа)"),
-    telebot.types.BotCommand("begin", "Запуск игры (группа)"),
-    telebot.types.BotCommand("cancel", "Отмена игры"),
-    telebot.types.BotCommand("top", "Топ игроков"),
-    telebot.types.BotCommand("stats", "Статистика"),
-    telebot.types.BotCommand("help", "Помощь"),
-    telebot.types.BotCommand("rules", "Правила"),
-])
+# --- Удобное и оформленное меню команд для Telegram ---
+from telebot import types
+
+# Команды для личных сообщений (личка)
+private_commands = [
+    types.BotCommand("start", "🟢 Авторизация и инструкция"),
+    types.BotCommand("help", "🆘 Справка по боту"),
+    types.BotCommand("rules", "📜 Правила игры"),
+    types.BotCommand("stats", "📊 Ваша статистика"),
+]
+
+# Команды для групповых чатов
+group_commands = [
+    types.BotCommand("start_game", "🏁 Начать новую игру"),
+    types.BotCommand("join", "🔗 Присоединиться к игре"),
+    types.BotCommand("begin", "🚩 Запустить фазу игры"),
+    types.BotCommand("cancel", "🚫 Отменить игру"),
+    types.BotCommand("top", "🔝 ТОП игроков чата"),
+]
+
+# Установить команды для всех личных чатов
+bot.set_my_commands(private_commands, scope=types.BotCommandScopeAllPrivateChats())
+
+# Установить команды для всех групповых чатов
+bot.set_my_commands(group_commands, scope=types.BotCommandScopeAllGroupChats())
 
 @bot.message_handler(commands=['start'])
 def handler_start(message):
@@ -57,7 +72,7 @@ def handler_rules(message):
     chat_id = str(message.chat.id)
     bot.send_message(chat_id, rules_text)
 
-@bot.message_handler(commands=['start_game'])  # Проверка на чат это или нет, удаления чата
+@bot.message_handler(commands=['start_game'])
 def start_game(message):
     chat_id = str(message.chat.id)
     if chat_id[0] != "-":
@@ -164,7 +179,6 @@ def begin_game(message):
         table_chat.save_json_file_and_write(data)
         start_new_game(chat_id)
 
-# --- Добавлен обработчик для отмены игры ---
 @bot.message_handler(commands=['cancel'])
 def cancel_game(message):
     chat_id = str(message.chat.id)
