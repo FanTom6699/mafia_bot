@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-API_TOKEN = os.getenv('API_TOKEN')
+API_TOKEN = os.getenv('7891995522:AAG_i8k8MtCSXP9SltFhDxaBiS5EQI-rc3w')
 
 INACTIVITY_TIMEOUT = 300
 
