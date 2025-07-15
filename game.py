@@ -1,8 +1,8 @@
 import threading
 from time import time, sleep
 import random
-from telebot import types, TeleBot
-from cfg.config import (API_TOKEN, MIN_USER_IN_GAME,
+from telebot import types
+from cfg.config import (MIN_USER_IN_GAME,
                         MAX_USER_IN_GAME, LOSE_MAFIA,
                         INACTIVITY_TIMEOUT, MARKUP_TG)
 from db.sqlite.repository import DataBase
@@ -12,7 +12,12 @@ from db.json.dynamic_database import Json
 table_chat = Json()
 table_users = DataBase(TABLE_NAME_USERS, USERS_TABLE_CREATE)
 
-bot = TeleBot(API_TOKEN)
+# Bot instance will be injected from bot.py
+bot = None
+
+def set_bot_instance(bot_instance):
+    global bot
+    bot = bot_instance
 
 
 def get_admins(chat_id):

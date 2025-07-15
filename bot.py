@@ -5,6 +5,10 @@ from cfg.config import API_TOKEN, MAX_USER_IN_GAME
 bot = TeleBot(API_TOKEN)
 registration_data = {}  # chat_id: {'players': [usernames], 'msg_id': int}
 
+# Initialize game module with our bot instance
+import game
+game.set_bot_instance(bot)
+
 # --- Команды меню для Telegram ---
 private_commands = [
     types.BotCommand("start", "🟢 Авторизация и инструкция"),
@@ -126,16 +130,50 @@ def handler_top(message):
 
 @bot.message_handler(commands=['begin'])
 def handler_begin(message):
+    from game import start_new_game, check_player_count, table_chat
+    
     chat_id = message.chat.id
     if chat_id not in registration_data or not registration_data[chat_id]['players']:
         bot.send_message(chat_id, "Нет зарегистрированных игроков для начала игры.")
         return
-    bot.send_message(chat_id, "Игра началась! (реализация логики игры будет тут)")
-    # Можно откреплять меню регистрации, если нужно:
-    try:
-        bot.unpin_chat_message(chat_id, registration_data[chat_id]['msg_id'])
-    except Exception: pass
-    registration_data.pop(chat_id, None)
+    
+    # Convert registration data to game format
+    data = table_chat.open_json_file_and_write()
+    if str(chat_id) not in data["chat_id"]:
+        data["chat_id"][str(chat_id)] = {
+            "players": {},
+            "game_in_progress": False,
+            "mafia": [],
+            "don": None,
+            "mute_users": [],
+            "admins": []
+        }
+    
+    # Convert registered players to game format
+    for player_name in registration_data[chat_id]['players']:
+        # For demo purposes, we'll use the player name as ID
+        # In real implementation, you'd need user IDs
+        player_id = str(hash(player_name) % 1000000)  # Simple hash for demo
+        data["chat_id"][str(chat_id)]["players"][player_id] = {
+            "name": player_name,
+            "roles": "",
+            "last_active": 0
+        }
+    
+    table_chat.save_json_file_and_write(data)
+    
+    # Check player count and start game
+    if check_player_count(str(chat_id), data):
+        start_new_game(str(chat_id))
+        
+        # Clean up registration
+        try:
+            bot.unpin_chat_message(chat_id, registration_data[chat_id]['msg_id'])
+        except Exception: 
+            pass
+        registration_data.pop(chat_id, None)
+    else:
+        bot.send_message(chat_id, "Недостаточно игроков для начала игры.")
 
 @bot.message_handler(commands=['leave'])
 def cmd_leave(message):
@@ -151,6 +189,22 @@ def cmd_leave(message):
         text = get_registration_text(registration_data[chat_id]['players'])
         bot.edit_message_text(text, chat_id, registration_data[chat_id]['msg_id'], reply_markup=markup)
         bot.send_message(chat_id, f"{user_name}, вы вышли из регистрации.")
+
+# ---- Game callback handlers ----
+@bot.callback_query_handler(func=lambda call: call.data.startswith(('night_', 'vote_', 'mafia_vote_', 'comm_')))
+def handle_game_callbacks(call):
+    from game import handle_night_action_callback, handle_vote
+    
+    if call.data.startswith('vote_'):
+        handle_vote(call)
+    else:
+        handle_night_action_callback(call)
+
+# ---- Mafia chat handler ----
+@bot.message_handler(func=lambda message: message.chat.type == 'private' and not message.text.startswith('/'))
+def handle_private_messages(message):
+    from game import handle_mafia_chat_message
+    handle_mafia_chat_message(message)
 
 if __name__ == "__main__":
     bot.infinity_polling()
