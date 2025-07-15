@@ -19,7 +19,6 @@ bot = telebot.TeleBot(API_TOKEN)
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# --- Удобное и оформленное меню команд для Telegram ---
 from telebot import types
 
 # Команды для личных сообщений (личка)
@@ -44,6 +43,16 @@ bot.set_my_commands(private_commands, scope=types.BotCommandScopeAllPrivateChats
 
 # Установить команды для всех групповых чатов
 bot.set_my_commands(group_commands, scope=types.BotCommandScopeAllGroupChats())
+
+@bot.message_handler(content_types=['new_chat_members'])
+def greet_new_chat_members(message):
+    for new_member in message.new_chat_members:
+        if new_member.id == bot.get_me().id:
+            # Можно использовать start_text, чтобы не дублировать инструкции
+            bot.send_message(
+                message.chat.id,
+                start_text
+            )
 
 @bot.message_handler(commands=['start'])
 def handler_start(message):
